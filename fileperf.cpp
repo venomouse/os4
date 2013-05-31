@@ -15,25 +15,41 @@ fsPerformance filePerformanceLinkedList (unsigned int fileSize,
 		unsigned int pointerSize,
 		unsigned int metaDataSize)
 {
-	unsigned int firstBlockDataSize = blockSize - pointerSize - metaDataSize;
-	unsigned int dataSize = blockSize - pointerSize;
-	int curFileSize = fileSize;
-	unsigned int numBlock = 1;
-	unsigned int accessSum = 0;
+	long unsigned int firstBlockDataSize = blockSize - pointerSize - metaDataSize;
+	long unsigned int dataSize = blockSize - pointerSize;
+	long int curFileSize = fileSize;
+	long unsigned int numBlock = 1;
+	long long accessSum = 0;
 	fsPerformance filePerformance;
 
 	for (; curFileSize > 0; numBlock++)
 	{
 		if (numBlock == 1)
 		{
-			curFileSize -= firstBlockDataSize;
-			accessSum +=firstBlockDataSize;
+			if (firstBlockDataSize > curFileSize)
+			{
+				accessSum += curFileSize;
+				curFileSize = 0;
+			}
+			else
+			{
+				curFileSize -= firstBlockDataSize;
+				accessSum +=firstBlockDataSize;
+			}
 		}
 
 		else
 		{
-			curFileSize -= dataSize;
-			accessSum += dataSize*numBlock;
+			if (dataSize > curFileSize)
+			{
+				accessSum += curFileSize*numBlock;
+				curFileSize = 0;
+			}
+			else
+			{
+				curFileSize -= dataSize;
+				accessSum +=  dataSize*numBlock;
+			}
 		}
 	}
 	filePerformance.averageAccessNum = (double) accessSum / (double) fileSize;
@@ -50,11 +66,11 @@ int calculateLinkedListPerformance ( unsigned int blockSize,
 {
 	 std::vector<unsigned int>::const_iterator it = fileSizes.begin();
 	 unsigned int totalSpace = 0;
-	 unsigned int totalAccess = 0;
-	 unsigned int nonEmptyFileCounter;
+	 double totalAccess = 0;
+	 unsigned int nonEmptyFileCounter = 0;
 	 fsPerformance filePerformance;
 
-	 while (it != fileSizes.end())
+	 for (; it != fileSizes.end(); it++)
 	 {
 		 if (*it > 0)
 		 {
@@ -74,7 +90,7 @@ int calculateLinkedListPerformance ( unsigned int blockSize,
 
 	 if (nonEmptyFileCounter > 0)
 	 {
-		 perf.averageAccessNum = totalAccess / nonEmptyFileCounter;
+		 perf.averageAccessNum = (double) totalAccess / (double) nonEmptyFileCounter;
 	 }
 
 	 else
@@ -93,7 +109,7 @@ bool isEnoughSpace (unsigned int blockSize,
 {
 		unsigned int maxSpace = 0;
 
-		for (int i =0; i < numHeaderPointers; i++)
+		for (unsigned int i =0; i < numHeaderPointers; i++)
 		{
 			if (headerBlockPointers[i] == 0)
 			{
@@ -101,12 +117,13 @@ bool isEnoughSpace (unsigned int blockSize,
 			}
 			else
 			{
-				maxSpace += pow (numBlockPointers, i) * headerBlockPointers[i] * blockSize;
+				//TODO - remove
+				maxSpace += pow ((double)numBlockPointers, (int)i) * headerBlockPointers[i] * blockSize;
 			}
 
 		}
 
-		if (maxSpace > maximalFileSize)
+		if (maxSpace >= maximalFileSize)
 		{
 			return true;
 		}
@@ -121,29 +138,33 @@ unsigned int* calculateHeaderBlockPointers (unsigned int blockSize,
 		unsigned int maximalFileSize)
 {
 
-		if (numHeaderPointers == 0 || (numHeaderPointers == 1 && maximalFileSize > blockSize))
+		if ((numHeaderPointers == 1 && maximalFileSize > blockSize))
 		{
 			return NULL;
 		}
 
 		unsigned int* headerBlockPointerLevels = new unsigned int [numHeaderPointers];
-		headerBlockPointerLevels[0] = numHeaderPointers;
-		for (int i = 1; i < numHeaderPointers; i++)
+		if (headerBlockPointerLevels == NULL)
 		{
-			headerBlockPointerLevels = 0;
+			return NULL;
 		}
 
-		int currLevel = 0;
-		while (!isEnoughSpace(blockSize, numHeaderPointers, headerBlockPointerLevels,numBlockPointers,maximalFileSize))
+		headerBlockPointerLevels[0] = numHeaderPointers;
+		for (unsigned int i = 1; i < numHeaderPointers; i++)
 		{
-			if (currLevel == numHeaderPointers - 1)
+			headerBlockPointerLevels[i] = 0;
+		}
+
+		unsigned int currLevel = 1;
+		for ( ; !isEnoughSpace(blockSize, numHeaderPointers, headerBlockPointerLevels,numBlockPointers,maximalFileSize); currLevel++)
+		{
+			if (currLevel == numHeaderPointers)
 			{
 				delete [] headerBlockPointerLevels;
 				return NULL;
 			}
 
 			headerBlockPointerLevels[0] -= 1;
-			currLevel++;
 			headerBlockPointerLevels[currLevel] = 1;
 		}
 
@@ -157,11 +178,11 @@ fsPerformance filePerformanceInode( unsigned int fileSize,
 				unsigned int* headerBlockPointerLevels)
 {
 		unsigned int currSize = fileSize;
-		int level = 0;
+		unsigned int level = 0;
 		fsPerformance filePerformance;
 		//any file has at least one block
 		unsigned int numBlocks= 1;
-		unsigned int accessNum = 0;
+		double accessNum = 0;
 
 		//assuming 1 direct pointer is enough for maximal size files
 		if (numHeaderPointers == 1)
@@ -171,9 +192,10 @@ fsPerformance filePerformanceInode( unsigned int fileSize,
 			return filePerformance;
 		}
 
-		while (level < numHeaderPointers)
+		for (; level < numHeaderPointers; level++)
 		{
-			unsigned int fullLevelCapacity = blockSize * pow (numBlockPointers, level) * headerBlockPointerLevels[level];
+			//TODO - remove
+			unsigned int fullLevelCapacity = blockSize * pow ((double)numBlockPointers,(int) level) * headerBlockPointerLevels[level];
 			if (fullLevelCapacity > currSize )
 			{
 				break;
@@ -182,27 +204,32 @@ fsPerformance filePerformanceInode( unsigned int fileSize,
 
 			currSize -= fullLevelCapacity;
 			//using geometrical series sum formula
-			numBlocks += headerBlockPointerLevels[level] * (pow (numBlockPointers,level + 1) - 1)/ (numBlockPointers -1);
-			accessNum += pow (numBlockPointers, level) * (level+2) * blockSize * headerBlockPointerLevels[level];
+			//TODO remove
+			numBlocks += headerBlockPointerLevels[level] * (pow ((double)numBlockPointers,(int)level + 1) - 1)/ (numBlockPointers -1);
+			accessNum += pow ((double)numBlockPointers, (int) level) * (level+2) * blockSize * headerBlockPointerLevels[level];
 
 		}
-		//there is a part-filled level
-		//updating the access number
-		accessNum += currSize * (level +2 );
-		unsigned int lastLevelBlocks = (int)ceil((double) currSize / (double) blockSize);
-		//adding the number of data blocks in the last level
-		numBlocks += lastLevelBlocks;
-		//adding the pointer blocks for the last level (no need to add again the header block)
-		for (; level  > 0; level --)
+
+		if (currSize > 0)
 		{
-			lastLevelBlocks = ceil((double)lastLevelBlocks/(double)numBlockPointers);
-			numBlocks +=lastLevelBlocks;
+			//there is a part-filled level
+			//updating the access number
+			accessNum += currSize * (level +2 );
+			unsigned int lastLevelBlocks = (int)ceil((double) currSize / (double) blockSize);
+			//adding the number of data blocks in the last level
+			numBlocks += lastLevelBlocks;
+			//adding the pointer blocks for the last level (no need to add again the header block)
+			for (; level  > 0; level --)
+			{
+				lastLevelBlocks = ceil((double)lastLevelBlocks/(double)numBlockPointers);
+				numBlocks +=lastLevelBlocks;
+			}
 		}
 
 		filePerformance.space = numBlocks*blockSize;
-		filePerformance.averageAccessNum = accessNum;
-
-}
+		filePerformance.averageAccessNum = accessNum / (double) fileSize;
+		return filePerformance;
+  }
 
 int calculateInodePerformance (  unsigned int blockSize,
 		unsigned int pointerSize,
@@ -211,11 +238,23 @@ int calculateInodePerformance (  unsigned int blockSize,
 		const std::vector<unsigned int> &fileSizes,
 		fsPerformance &perf)
 {
+
 		unsigned int numHeaderPointers = (blockSize - metaDataSize) / pointerSize;
+		if (numHeaderPointers == 0)
+		{
+			return FAIL;
+		}
+
+		if ((numHeaderPointers == 1 && maximalFileSize > blockSize))
+		{
+			return FAIL;
+		}
+
+
 		unsigned int numBlockPointers = blockSize / pointerSize;
 
 		unsigned int* headerBlockPointerLevels = calculateHeaderBlockPointers (blockSize,
-						pointerSize,metaDataSize, maximalFileSize);
+						numHeaderPointers,numBlockPointers, maximalFileSize);
 
 
 		if (headerBlockPointerLevels == NULL)
@@ -223,13 +262,11 @@ int calculateInodePerformance (  unsigned int blockSize,
 			return FAIL;
 		}
 
-		int fileNum = fileSizes.size();
 		//for debugging purposes, we save the file performances until the
 		//end of function run;
 		std::vector<fsPerformance>  allFiles = std::vector<fsPerformance>();
 		unsigned int totalSpace =0;
-		unsigned int totalAccessNum = 0;
-		fsPerformance totalPerformance;
+		double totalAccessNum = 0;
 		unsigned int nonEmptyFileCounter = 0;
 		std::vector<unsigned int>::const_iterator it = fileSizes.begin();
 
@@ -240,7 +277,6 @@ int calculateInodePerformance (  unsigned int blockSize,
 			{
 				nonEmptyFileCounter++;
 				filePerformance = filePerformanceInode (*it,blockSize,numHeaderPointers,numBlockPointers,headerBlockPointerLevels);
-
 			}
 
 			else
@@ -255,9 +291,10 @@ int calculateInodePerformance (  unsigned int blockSize,
 
 		}
 
+		perf.space = totalSpace;
+		perf.averageAccessNum = (double) totalAccessNum / (double) nonEmptyFileCounter;
 
-
-
+		return SUCCESS;
 }
 
 int checkInput (unsigned int blockSize,
@@ -268,7 +305,7 @@ int checkInput (unsigned int blockSize,
 {
 	std::vector<unsigned int>::const_iterator it = fileSizes.begin();
 
-	if (blockSize <= 0 || pointerSize <=0 || maximalFileSize <= 0 || pointerSize >= blockSize)
+	if (blockSize <= 0 || pointerSize <=0 || maximalFileSize <= 0 || pointerSize + metaDataSize > blockSize)
 	{
 		return FAIL;
 	}

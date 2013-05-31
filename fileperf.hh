@@ -7,6 +7,8 @@
  */
 
 #include <vector>
+#include <cmath>
+#include <cstdlib>
 
 struct fsPerformance {
   long unsigned int space; 
